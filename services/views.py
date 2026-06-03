@@ -12,7 +12,13 @@ from .serializers import (
     ChildServiceSerializer
 )
 
-
+def _has_active_bookings(child_service):
+    """Check if service is used in any active booking."""
+    from booking.models import BookingService
+    return BookingService.objects.filter(
+        service=child_service,
+        booking__status__in=["pending", "confirmed"]
+    ).exists()
 # -------------------------
 # USER PUBLIC VIEWS (No auth)
 # -------------------------
@@ -217,6 +223,8 @@ class AdminChildServiceDetailView(APIView):
 
     def put(self, request, main_service_id, child_id):
         child = self.get_object(main_service_id, child_id)
+        # ← removed _has_active_bookings check, editing always allowed
+
         serializer = ChildServiceSerializer(
             child, data=request.data, partial=False, context={'request': request}
         )
@@ -228,13 +236,16 @@ class AdminChildServiceDetailView(APIView):
             child.save()
             return Response(
                 {"message": "Child service updated",
-                 "data": ChildServiceSerializer(child, context={'request': request}).data},
+                "data": ChildServiceSerializer(child, context={'request': request}).data},
                 status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
     def patch(self, request, main_service_id, child_id):
         child = self.get_object(main_service_id, child_id)
+        # ← removed _has_active_bookings check, editing always allowed
+
         serializer = ChildServiceSerializer(
             child, data=request.data, partial=True, context={'request': request}
         )
@@ -246,21 +257,30 @@ class AdminChildServiceDetailView(APIView):
             child.save()
             return Response(
                 {"message": "Child service partially updated",
-                 "data": ChildServiceSerializer(child, context={'request': request}).data},
+                "data": ChildServiceSerializer(child, context={'request': request}).data},
                 status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
     def delete(self, request, main_service_id, child_id):
         child = self.get_object(main_service_id, child_id)
+
+        # ← only block deletion if active bookings exist
+        if _has_active_bookings(child):
+            return Response(
+                {"error": "Cannot delete a service that has active bookings."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             child.delete()
-            return Response({"message": "Child service deleted"}, status=status.HTTP_200_OK)
+            return Response(
+                {"message": "Child service deleted"},
+                status=status.HTTP_200_OK
+            )
         except ProtectedError:
             return Response(
                 {"error": "Cannot delete this service because it is used in a booking."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-
-

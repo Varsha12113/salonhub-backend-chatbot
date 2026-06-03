@@ -36,12 +36,10 @@ class DailySlotSerializer(serializers.ModelSerializer):
     def get_booked_service(self, obj):
         if obj.booked_service:
             return {
-                "id": obj.booked_service.id,
-                "name": obj.booked_service.name
+                "id":   obj.booked_service.id,
+                "name": obj.booked_service.child_service_name  # ← fix .name to .child_service_name
             }
         return None
-
-
 
 
 

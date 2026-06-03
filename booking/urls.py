@@ -17,6 +17,11 @@ from .views import (
     AdminAppointmentsStatsView,
     AdminNewCustomersView,
 )
+from .payment_views import (
+    CreatePaymentOrderView,
+    VerifyPaymentView,
+    RazorpayWebhookView,
+)
 
 urlpatterns = [
 
@@ -31,7 +36,13 @@ urlpatterns = [
     # ------------------------------
     path('checkout/', CheckoutView.as_view(), name='booking-checkout'),
     path('history/', BookingHistoryView.as_view(), name='booking-history'),
-
+    
+    # ------------------------------
+    # Payment
+    # ------------------------------
+    path("payment/create-order/",       CreatePaymentOrderView.as_view()),
+    path("payment/verify/",             VerifyPaymentView.as_view()),
+    path("payment/webhook/",            RazorpayWebhookView.as_view()),
 
     # ------------------------------
     # ADMIN BOOKING MANAGEMENT

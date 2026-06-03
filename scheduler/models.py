@@ -41,6 +41,7 @@ class SlotMaster(models.Model):
 class DailySlot(models.Model):
     STATUS_CHOICES = (
         ('available', 'Available'),
+        ('reserved',  'Reserved'), 
         ('booked', 'Booked'),
         ('blocked', 'Blocked'),
         ('expired', 'Expired'), 

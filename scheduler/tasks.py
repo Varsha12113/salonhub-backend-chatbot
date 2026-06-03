@@ -50,8 +50,8 @@ def generate_rolling_slots(window_days=3):
                     continue
 
                 # 5️⃣ DO NOT TOUCH BOOKED SLOTS
-                if slot.status == "booked":
-                    continue
+                if slot.status in ("booked", "reserved"):
+                  continue
 
                 # 6️⃣ TODAY: handle expired/future
                 if date == today:
@@ -81,3 +81,56 @@ def watch_and_expire_slots():
     ).update(status="expired")
 
     return "Expired today's finished slots"
+
+
+# 2. Add this new task at the bottom of the file:
+@shared_task
+def expire_reserved_slots():
+    """
+    Runs every 5 minutes.
+    Finds bookings where payment was never completed
+    within 15 minutes and frees their slots.
+    """
+    from booking.models import Booking
+    from datetime import timedelta
+
+    cutoff = timezone.now() - timedelta(minutes=15)
+
+    stale_bookings = Booking.objects.filter(
+        status="pending",
+        payment_status="pending",
+        created_at__lt=cutoff
+    ).select_related("start_slot__slot_master")
+
+    freed = 0
+    for booking in stale_bookings:
+        from booking.views import compute_required_slot_master_ids
+
+        total_minutes = sum(
+            bs.service.duration for bs in booking.services.all()
+        )
+        slot_masters = SlotMaster.objects.filter(
+            is_active=True
+        ).order_by("start_time")
+
+        needed = compute_required_slot_master_ids(
+            booking.start_slot.slot_master,
+            slot_masters,
+            total_minutes
+        )
+
+        DailySlot.objects.filter(
+            slot_master_id__in=needed,
+            slot_date=booking.start_slot.slot_date,
+            status="reserved"
+        ).update(
+            status="available",
+            booked_by=None,
+            booked_service=None
+        )
+
+        booking.status = "cancelled"
+        booking.save(update_fields=["status"])
+        freed += 1
+
+    return f"Expired {freed} stale bookings"

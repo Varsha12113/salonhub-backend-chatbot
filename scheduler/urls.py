@@ -6,6 +6,7 @@ from .views import (
     WorkingDayViewSet,
     DailySlotListAPIView,
     AvailableDatesAPIView,
+    AdminDailySlotListAPIView,
 )
 
 router = DefaultRouter()
@@ -17,4 +18,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('slots/', DailySlotListAPIView.as_view(), name='daily-slots'),
     path('available-dates/', AvailableDatesAPIView.as_view(), name='available-dates'),
+    path('admin/slots/', AdminDailySlotListAPIView.as_view(), name='admin-daily-slots'),
 ]

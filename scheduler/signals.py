@@ -45,7 +45,7 @@ def ensure_slots_for_recent_days(sender, instance, created, **kwargs):
 
         # If already exists and not booked, keep it in sync with working/holiday rules
         if not created_flag:
-            if obj.status != "booked":  # do not override booked slots
+            if  obj.status not in ("booked", "reserved"):  # do not override booked slots
                 obj.status = default_status
                 obj.is_holiday = is_closed
                 obj.save()

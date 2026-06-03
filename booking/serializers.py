@@ -41,7 +41,7 @@ class BookingServiceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BookingService
-        fields = ['id', 'service', 'service_name']
+        fields = ['id', 'service', 'service_name', 'price', 'duration', 'quantity']
 
 
 class BookingSerializer(serializers.ModelSerializer):
@@ -60,6 +60,8 @@ class BookingSerializer(serializers.ModelSerializer):
             "gst_amount",
             "grand_total",
             "status",
+            "payment_status",       # new
+            "razorpay_order_id",    # new
             "created_at",
         ]
 

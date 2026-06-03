@@ -14,7 +14,7 @@ class Gender(models.Model):
 
 # ✅ Main Services Table
 class MainServices(models.Model):
-    gender = models.ForeignKey(Gender, on_delete=models.CASCADE, related_name='main_services')
+    gender = models.ForeignKey(Gender, on_delete=models.PROTECT, related_name='main_services')
     main_services_name = models.CharField(max_length=100)
     main_services_description = models.TextField(blank=True, null=True)
 
@@ -27,8 +27,8 @@ class MainServices(models.Model):
 
 # ✅ Child Services Table
 class Child_services(models.Model):
-    gender = models.ForeignKey(Gender, on_delete=models.CASCADE, null=True, blank=True)
-    main_services = models.ForeignKey(MainServices, on_delete=models.CASCADE, related_name='child_services')
+    gender = models.ForeignKey(Gender, on_delete=models.PROTECT, null=True, blank=True)
+    main_services = models.ForeignKey(MainServices, on_delete=models.PROTECT, related_name='child_services')
     child_service_name = models.CharField(max_length=100, default="Default Service")
     child_service_description = models.TextField(blank=True, null=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)

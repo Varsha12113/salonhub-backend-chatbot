@@ -109,3 +109,23 @@ class AvailableDatesAPIView(APIView):
                 available_dates.append(str(current_date))
 
         return Response({"available_dates": available_dates})
+
+# scheduler/views.py — add after AvailableDatesAPIView class
+
+class AdminDailySlotListAPIView(generics.ListAPIView):
+    serializer_class = DailySlotSerializer
+    permission_classes = [permissions.IsAdminUser]
+    pagination_class = None  # ← add this line to disable pagination
+
+    def get_queryset(self):
+        date_str = self.request.query_params.get("date")
+        if not date_str:
+            return DailySlot.objects.none()
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except:
+            return DailySlot.objects.none()
+
+        return DailySlot.objects.filter(
+            slot_date=date_obj
+        ).select_related("slot_master").order_by("slot_master__start_time")

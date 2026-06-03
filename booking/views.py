@@ -15,7 +15,8 @@ from scheduler.models import DailySlot, SlotMaster
 from services.models import Child_services
 from django.db.models.functions import TruncMonth
 from booking.helpers import compute_required_slot_master_ids  # you indicated this exists
-
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 
 class CartAddView(APIView):
@@ -114,33 +115,24 @@ def create_admin_notification(booking):
         message=message
     )
 
-# --- Fixed CheckoutView
+
+# ── Replace CheckoutView.post() ──
 class CheckoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        booking = Booking.objects.filter(user=request.user).order_by('-created_at').first()
-
-        if not booking:
-              return Response({"detail": "No booking found"}, status=404)
-
-        serializer = BookingSerializer(booking)
-        return Response(serializer.data, status=200)
-
     def post(self, request):
-        serializer = CreateBookingSerializer(data=request.data, context={"request": request})
+        serializer = CreateBookingSerializer(
+            data=request.data, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
 
         start_slot_id = serializer.validated_data["start_slot_id"]
         services_list = serializer.validated_data["services"]
 
-        # Calculate total required minutes
-        cart_items = CartItem.objects.filter(user=request.user)
+        cart_items    = CartItem.objects.filter(user=request.user)
         total_minutes = 0
 
         if cart_items.exists():
             for ci in cart_items:
-                total_minutes += int(ci.service.duration)
+                total_minutes += int(ci.service.duration) * ci.quantity
         else:
             for s in services_list:
                 service = Child_services.objects.get(id=s["service_id"])
@@ -148,81 +140,109 @@ class CheckoutView(APIView):
 
         try:
             with transaction.atomic():
-                start_slot = DailySlot.objects.select_for_update().get(id=start_slot_id)
+                start_slot = DailySlot.objects.select_for_update().get(
+                    id=start_slot_id
+                )
 
                 if start_slot.status != "available":
-                    return Response({"detail": "Start slot not available"}, status=400)
+                    return Response(
+                        {"detail": "Start slot not available"}, status=400
+                    )
 
-                slot_masters = SlotMaster.objects.filter(is_active=True).order_by("start_time")
+                slot_masters  = SlotMaster.objects.filter(
+                    is_active=True
+                ).order_by("start_time")
                 needed_master_ids = compute_required_slot_master_ids(
-                    start_slot.slot_master,
-                    slot_masters,
-                    total_minutes,
+                    start_slot.slot_master, slot_masters, total_minutes
                 )
 
                 if not needed_master_ids:
-                    return Response({"detail": "Not enough consecutive slots"}, status=400)
+                    return Response(
+                        {"detail": "Not enough consecutive slots"}, status=400
+                    )
 
                 required_slots = list(
                     DailySlot.objects.select_for_update()
-                    .filter(slot_master_id__in=needed_master_ids, slot_date=start_slot.slot_date)
+                    .filter(
+                        slot_master_id__in=needed_master_ids,
+                        slot_date=start_slot.slot_date
+                    )
                     .order_by("slot_master__start_time")
                 )
 
                 for s in required_slots:
                     if s.status != "available":
-                        return Response({"detail": "Some slots already booked"}, status=400)
+                        return Response(
+                            {"detail": "Some slots already booked"}, status=400
+                        )
 
-                # Reserve slots
+                # ── Set to RESERVED (not booked) until payment completes ──
                 for s in required_slots:
-                    s.status = "booked"
-                    s.booked_by = request.user
+                    s.status     = "reserved"
+                    s.booked_by  = request.user
                     s.booked_service = Child_services.objects.get(
                         id=services_list[0]["service_id"]
                     )
                     s.save()
 
-                # Create Booking
+                # Create booking
                 booking = Booking.objects.create(
                     user=request.user,
                     start_slot=start_slot,
                     status="pending",
+                    payment_status=Booking.PAYMENT_PENDING,
                 )
 
-                # Save booking services
+                # Save booking services with snapshots
                 saved_services = []
                 if cart_items.exists():
                     for ci in cart_items:
-                        BookingService.objects.create(booking=booking, service=ci.service)
+                        BookingService.objects.create(
+                            booking=booking,
+                            service=ci.service,
+                            price=ci.service.price,        # snapshot
+                            duration=ci.service.duration,  # snapshot
+                            quantity=ci.quantity,
+                        )
                         saved_services.append(ci.service.child_service_name)
                     cart_items.delete()
                 else:
                     for s in services_list:
                         service = Child_services.objects.get(id=s["service_id"])
-                        BookingService.objects.create(booking=booking, service=service)
+                        BookingService.objects.create(
+                            booking=booking,
+                            service=service,
+                            price=service.price,
+                            duration=service.duration,
+                            quantity=s.get("quantity", 1),
+                        )
                         saved_services.append(service.child_service_name)
 
                 booking.calculate_totals()
 
         except Exception as e:
-            return Response({"detail": "Booking error", "error": str(e)}, status=500)
+            return Response(
+                {"detail": "Booking error", "error": str(e)}, status=500
+            )
 
-        #SEND NOTIFICATION TO ADMIN HERE
         create_admin_notification(booking)
 
-
-        response = {
-            "booking_id": booking.id,
-            "username": request.user.username,
-            "email": request.user.email,
-            "date": str(start_slot.slot_date),
-            "time": f"{start_slot.slot_master.start_time} - {start_slot.slot_master.end_time}",
-            "services": saved_services,
-            "total_price": float(booking.grand_total),
-            "status": booking.status,
-        }
-        return Response(response, status=201)
-    
+        return Response({
+        "booking_id":     booking.id,
+        "username":       request.user.username,
+        "email":          request.user.email,
+        "date":           str(start_slot.slot_date),
+        "time":           f"{start_slot.slot_master.start_time} - {start_slot.slot_master.end_time}",
+        "services":       saved_services,
+        "total_price":    float(booking.total_price),   # ← 500 (base price)
+        "gst_amount":     float(booking.gst_amount),    # ← 90
+        "grand_total":    float(booking.grand_total),   # ← 590
+        "gst_percent":    float(booking.gst_percent),   # ← 18
+        "status":         booking.status,
+        "payment_status": booking.payment_status,
+        "next_step":      "call /booking/payment/create-order/ with this booking_id",
+    }, status=201)
+            
 
 class AdminNotificationListView(APIView):
     permission_classes = [permissions.IsAdminUser]
@@ -291,40 +311,71 @@ class AdminAcceptView(APIView):
         return Response({"detail": "Booking confirmed"}, status=200)
 
 
+# ── Replace AdminDeclineView.post() ──
 class AdminDeclineView(APIView):
-    permission_classes = [permissions.IsAdminUser]
-
     def post(self, request):
         booking_id = request.data.get("booking_id")
-        booking = get_object_or_404(Booking, id=booking_id)
+        booking    = get_object_or_404(Booking, id=booking_id)
 
         if booking.status in ('declined', 'cancelled'):
-            return Response({"detail": "Booking already declined/cancelled"}, status=400)
+            return Response(
+                {"detail": "Booking already declined/cancelled"}, status=400
+            )
 
-        total_minutes = sum([bs.service.duration for bs in booking.services.all()])
-        slot_masters = SlotMaster.objects.filter(is_active=True).order_by("start_time")
-        needed = compute_required_slot_master_ids(booking.start_slot.slot_master, slot_masters, total_minutes)
-
-        # Free slots: set to available and remove booked_by/booked_service
+        # Free slots
+        total_minutes = sum(
+            [bs.service.duration for bs in booking.services.all()]
+        )
+        slot_masters = SlotMaster.objects.filter(
+            is_active=True
+        ).order_by("start_time")
+        needed = compute_required_slot_master_ids(
+            booking.start_slot.slot_master, slot_masters, total_minutes
+        )
         slots_qs = DailySlot.objects.filter(
             slot_master_id__in=needed,
             slot_date=booking.start_slot.slot_date
         )
         for s in slots_qs:
-            s.status = 'available'
-            s.booked_by = None
+            s.status         = "available"
+            s.booked_by      = None
             s.booked_service = None
             s.save()
 
-        booking.status = 'declined'
-        booking.save(update_fields=['status'])
+        booking.status = "declined"
+        booking.save(update_fields=["status"])
 
-        # Clear notification
-        AdminNotification.objects.filter(booking=booking).update(is_read=True, read_by=request.user)
+        AdminNotification.objects.filter(booking=booking).update(
+            is_read=True, read_by=request.user
+        )
 
+        # ── Trigger Razorpay refund if payment was made ──
+        if (
+            booking.payment_status == Booking.PAYMENT_PAID
+            and booking.razorpay_payment_id
+        ):
+            try:
+                import razorpay
+                client = razorpay.Client(
+                    auth=(
+                        settings.RAZORPAY_KEY_ID,
+                        settings.RAZORPAY_KEY_SECRET
+                    )
+                )
+                amount_paise = int(booking.grand_total * 100)
+                client.payment.refund(
+                    booking.razorpay_payment_id,
+                    {"amount": amount_paise}
+                )
+                booking.payment_status = Booking.PAYMENT_REFUNDED
+                booking.save(update_fields=["payment_status"])
+            except Exception as e:
+                # Log but don't block the decline
+                print(f"Refund failed for booking {booking.id}: {e}")
 
-        return Response({"detail": "Booking declined and slots freed"}, status=200)
-
+        return Response({
+            "detail": "Booking declined, slots freed, refund initiated"
+        }, status=200)
 
 class BookingHistoryView(APIView):
     permission_classes = [permissions.IsAdminUser]  # 🔐 ADMIN ONLY

@@ -14,15 +14,21 @@ from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab 
 
+import environ
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env()
+
+environ.Env.read_env(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-sd5ou(7euc2+g3d^)!4erbg=80tc=auw3+o_phx1#f83c@%rj#'
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
@@ -50,15 +56,25 @@ INSTALLED_APPS = [
     'django_filters',
     'booking.apps.BookingConfig',
 ]
+
+# ── Razorpay ──
+RAZORPAY_KEY_ID        = env("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET    = env("RAZORPAY_KEY_SECRET")
+RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET")
+
+
 CELERY_BEAT_SCHEDULE = {
-    "generate-slots-daily": {
-        "task": "scheduler.tasks.generate_rolling_slots",
-        "schedule": crontab(hour=0, minute=0),
-        # "schedule": crontab(minute="*/5"),
+    "generate-rolling-slots": {
+        "task":     "scheduler.tasks.generate_rolling_slots",
+        "schedule": crontab(hour=0, minute=5),   # daily 00:05
     },
-        "expire-every-minute": {
-        "task": "scheduler.tasks.watch_and_expire_slots",
-        "schedule": crontab(minute="*"),
+    "watch-expire-slots": {
+        "task":     "scheduler.tasks.watch_and_expire_slots",
+        "schedule": crontab(minute="*/5"),        # every 5 min
+    },
+    "expire-reserved-slots": {
+        "task":     "scheduler.tasks.expire_reserved_slots",
+        "schedule": crontab(minute="*/5"),        # every 5 min
     },
 }
 
@@ -213,6 +229,6 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'gpvarsha0930@gmail.com'
-EMAIL_HOST_PASSWORD = 'nfio yzaf rlrd rqjd'
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
