@@ -29,6 +29,19 @@ class SlotMaster(models.Model):
     end_time = models.TimeField()
     is_active = models.BooleanField(default=True)
 
+def clean(self):                                          # ← ADD THIS
+    if self.start_time and self.end_time:
+        start_dt = datetime.combine(datetime.today(), self.start_time)
+        end_dt = datetime.combine(datetime.today(), self.end_time)
+        duration = (end_dt - start_dt).total_seconds() / 60
+
+        if duration <= 0:
+            raise ValidationError("end_time must be after start_time.")
+        if duration > 120:
+            raise ValidationError(
+                f"Slot duration is {int(duration)} min — looks wrong. "
+                "Max allowed is 120 min."
+            )
     class Meta:
         unique_together = ('start_time', 'end_time')
 

@@ -1,0 +1,48 @@
+# Environment variables — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+*.log
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Migrations (optional — remove this line if you want to track migrations)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# Misc
+*.bak
+*.tmp

@@ -28,6 +28,7 @@ def home(request):
         "available_endpoints": [
             "/api/auth/",
             "/api/service/",
+            "/api/chat/", 
             "/admin/"
         ]
     })
@@ -41,7 +42,8 @@ urlpatterns = [
      # Scheduler app endpoints (SlotMaster, Holiday, WorkingDays, DailySlots)
     path('api/scheduler/', include('scheduler.urls')),
     path('api/booking/', include('booking.urls')),
-   
+    path('api/chat/', include('chatbot.urls')),
+    
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'scheduler',
     'django_filters',
     'booking.apps.BookingConfig',
+    'chatbot', 
 ]
 
 # ── Razorpay ──
@@ -232,3 +233,4 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+GROQ_API_KEY = env("GROQ_API_KEY")
