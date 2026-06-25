@@ -6,10 +6,15 @@ class ServicesConfig(AppConfig):
     name = 'services'
 
     def ready(self):
+        from django.db.utils import ProgrammingError, OperationalError
         from .models import Gender
-        # Ensure Male & Female always exist
-        if not Gender.objects.filter(name='male').exists():
-            Gender.objects.create(name='male')
-        if not Gender.objects.filter(name='female').exists():
-            Gender.objects.create(name='female')
 
+        try:
+            # Ensure Male & Female always exist
+            if not Gender.objects.filter(name='male').exists():
+                Gender.objects.create(name='male')
+            if not Gender.objects.filter(name='female').exists():
+                Gender.objects.create(name='female')
+        except (ProgrammingError, OperationalError):
+            # Tables don't exist yet (e.g. during initial migrate) — skip silently
+            pass
